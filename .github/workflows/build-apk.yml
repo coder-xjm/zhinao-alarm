@@ -23,8 +23,9 @@ jobs:
           distribution: zulu
           java-version: "17"
 
-      # ⚠️ 必须锁版本。本项目的 android/*.gradle 是按 Flutter 3.24 的工程模板写的，
-      #    用最新版会因模板变更（AGP/Kotlin/Gradle 版本、DSL 语法）导致构建失败。
+      # ⚠️ 必须锁具体版本，不能用 stable。脚手架的 AGP/Kotlin/Gradle 版本必须和
+      #    我们覆盖进去的 android/app/build.gradle 写法配套，锁版本才不会漂移。
+      #    Flutter 3.24.5 官方模板：Gradle 8.3 + AGP 8.1.0 + Kotlin 1.8.22 + Java 目标 1.8
       - name: 3. 安装 Flutter SDK（锁定 3.24.5）
         uses: subosito/flutter-action@v2
         with:
@@ -37,8 +38,14 @@ jobs:
           flutter --version
           java -version
 
-      # 本项目只提交了「自己的源码」，没提交 flutter create 生成的那堆脚手架文件
-      # （gradle wrapper 之类）。这一步在云端现场生成脚手架，再把我们的源码盖上去。
+      # 本仓库只提交了「自己的源码」，没提交 flutter create 生成的那堆脚手架文件
+      # （gradle wrapper 之类）。这一步在云端现场生成脚手架，再把源码盖上去。
+      #
+      # 重要原则：
+      #   · settings.gradle / 根 build.gradle / gradle.properties 保留脚手架自带的版本
+      #     —— 它们和 Flutter 版本是官方配好对的；
+      #   · 只覆盖 app/build.gradle（为了 minSdk = 24 和 androidx.core 依赖），
+      #     并把编译目标对齐到模板的 Java 1.8。
       - name: 4. 组装完整 Flutter 工程
         run: |
           set -euo pipefail
@@ -66,26 +73,76 @@ jobs:
           mkdir -p "$APP/kotlin/com/zhinao/alarm"
           cp "$SRC"/android/app/src/main/kotlin/com/zhinao/alarm/*.kt "$APP/kotlin/com/zhinao/alarm/"
 
-          cp "$SRC/android/app/build.gradle"  "$OUT/android/app/build.gradle"
-          cp "$SRC/android/build.gradle"      "$OUT/android/build.gradle"
-          cp "$SRC/android/settings.gradle"   "$OUT/android/settings.gradle"
-          cp "$SRC/android/gradle.properties" "$OUT/android/gradle.properties"
+          cp "$SRC/android/app/build.gradle" "$OUT/android/app/build.gradle"
 
+          # ---- 兼容补丁 1：编译目标对齐到模板的 Java 1.8 ----
+          # 插件模块（sqflite 等）全部按 1.8 编译，app 模块若用 17 会触发
+          # Kotlin 的 "Inconsistent JVM-target compatibility" 硬错误。
+          # 本地项目文件已修正为 1.8；这条 sed 防止旧版本文件混进来，是幂等空操作。
+          sed -i \
+            -e "s/JavaVersion\.VERSION_17/JavaVersion.VERSION_1_8/g" \
+            -e "s/jvmTarget = \"17\"/jvmTarget = JavaVersion.VERSION_1_8/" \
+            "$OUT/android/app/build.gradle"
+
+          # ---- 兼容补丁 2：withValues -> withOpacity ----
+          # 仓库里的部分源码曾用 Flutter 3.27 才有的 Color.withValues(alpha:)。
+          # 统一替换成所有版本都支持的 withOpacity()。本地代码已改成通用写法，
+          # 这一步在那种情况下是空操作；留着它是为了防止旧写法混进来。
+          find "$OUT/lib" -name "*.dart" -print0 | xargs -0 sed -i "s/\.withValues(alpha:/\.withOpacity(/g"
+          echo "withValues 残留（应为 0）: $(grep -r "withValues" "$OUT/lib" | wc -l)"
+
+          # ---- 自检：确认关键文件都到位、配置正确 ----
           echo "===== 组装完成，关键文件检查 ====="
           ls -1 "$OUT/lib" "$OUT/lib/core" "$OUT/lib/pages" "$APP/kotlin/com/zhinao/alarm"
+          echo "----- minSdk 与编译目标 -----"
+          grep -n -E "minSdk|Compatibility|jvmTarget" "$OUT/android/app/build.gradle"
 
       - name: 5. 拉取 Dart 依赖
         working-directory: ${{ runner.temp }}/zhinao_build
         run: flutter pub get
 
-      - name: 6. 编译 release APK
+      # 静态检查：Dart 层的 API 错误在这里就能暴露，不用等 Gradle。
+      # 故意不阻断构建（|| true），只把 error 级别的问题变成红色注解。
+      - name: 6. Dart 静态检查（报错变成注解，不阻断）
+        working-directory: ${{ runner.temp }}/zhinao_build
+        run: |
+          flutter analyze --no-pub > "$RUNNER_TEMP/analyze_log.txt" 2>&1 || true
+          grep -E "error •" "$RUNNER_TEMP/analyze_log.txt" | tail -20 | while IFS= read -r l; do
+            l="${l//$'\r'/}"
+            l="${l//%/%25}"
+            echo "::error::$l"
+          done
+          echo "===== analyze 结果 ====="
+          tail -5 "$RUNNER_TEMP/analyze_log.txt"
+
+      - name: 7. 编译 release APK
         working-directory: ${{ runner.temp }}/zhinao_build
         env:
-          # 国内网络环境下如遇 maven 拉取慢，可放开下面两行（云端一般不需要）
           GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g
-        run: flutter build apk --release
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee "$RUNNER_TEMP/build_log.txt"
 
-      - name: 7. 收集产物
+      # 构建失败时，把报错关键行提取出来变成「注解」——
+      # 注解不需要管理员权限就能远程读到，方便直接定位问题。
+      - name: 8. 失败时提取报错（变成注解）
+        if: failure()
+        run: |
+          LOG="$RUNNER_TEMP/build_log.txt"
+          if [ -f "$LOG" ]; then
+            echo "===== What went wrong / 报错关键行 ====="
+            grep -n -iE "error|FAILURE|Exception|What went wrong" "$LOG" | tail -30 | while IFS= read -r l; do
+              l="${l//$'\r'/}"
+              l="${l//%/%25}"
+              echo "::error::$l"
+            done
+            echo "===== 日志最后 50 行 ====="
+            tail -50 "$LOG"
+          else
+            echo "::error::构建日志文件不存在，失败发生在更早的步骤"
+          fi
+
+      - name: 9. 收集产物
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/out"
@@ -93,7 +150,7 @@ jobs:
              "$GITHUB_WORKSPACE/out/zhinao-alarm-v1.0.0.apk"
           ls -lh "$GITHUB_WORKSPACE/out/"
 
-      - name: 8. 上传 APK（在本次运行页面底部下载）
+      - name: 10. 上传 APK（在本次运行页面底部下载）
         uses: actions/upload-artifact@v4
         with:
           name: zhinao-alarm-apk
