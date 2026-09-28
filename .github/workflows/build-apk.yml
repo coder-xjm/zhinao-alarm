@@ -1,0 +1,101 @@
+name: 构建智闹 APK
+
+# 什么时候跑：
+#   1) 你往仓库推送代码时自动跑
+#   2) 也可以在 Actions 页面手动点 "Run workflow" 触发
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    # 用 GitHub 免费提供的 Ubuntu 云主机，Android SDK 和 JDK 都是预装好的
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: 1. 拉取源码
+        uses: actions/checkout@v4
+
+      - name: 2. 准备 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      # ⚠️ 必须锁版本。本项目的 android/*.gradle 是按 Flutter 3.24 的工程模板写的，
+      #    用最新版会因模板变更（AGP/Kotlin/Gradle 版本、DSL 语法）导致构建失败。
+      - name: 3. 安装 Flutter SDK（锁定 3.24.5）
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.5"
+          channel: stable
+          cache: true
+
+      - name: 3.1 打印工具链版本（方便排查）
+        run: |
+          flutter --version
+          java -version
+
+      # 本项目只提交了「自己的源码」，没提交 flutter create 生成的那堆脚手架文件
+      # （gradle wrapper 之类）。这一步在云端现场生成脚手架，再把我们的源码盖上去。
+      - name: 4. 组装完整 Flutter 工程
+        run: |
+          set -euo pipefail
+          SRC="$GITHUB_WORKSPACE"
+          OUT="$RUNNER_TEMP/zhinao_build"
+
+          flutter create --org com.zhinao --project-name alarm --platforms android "$OUT"
+
+          # 删掉脚手架里可能出现的 Kotlin DSL 脚本，避免和我们的 Groovy 脚本打架
+          find "$OUT/android" -name "*.gradle.kts" -delete
+
+          # ---- 用项目源码覆盖脚手架 ----
+          cp "$SRC/pubspec.yaml"          "$OUT/pubspec.yaml"
+          cp "$SRC/analysis_options.yaml" "$OUT/analysis_options.yaml"
+          rm -rf "$OUT/lib"
+          cp -r "$SRC/lib" "$OUT/lib"
+
+          APP="$OUT/android/app/src/main"
+          cp "$SRC/android/app/src/main/AndroidManifest.xml" "$APP/AndroidManifest.xml"
+          cp "$SRC/android/app/src/main/res/values/styles.xml" "$APP/res/values/styles.xml"
+          mkdir -p "$APP/res/values-night"
+          cp "$SRC/android/app/src/main/res/values-night/styles.xml" "$APP/res/values-night/styles.xml"
+
+          rm -rf "$APP/kotlin"
+          mkdir -p "$APP/kotlin/com/zhinao/alarm"
+          cp "$SRC"/android/app/src/main/kotlin/com/zhinao/alarm/*.kt "$APP/kotlin/com/zhinao/alarm/"
+
+          cp "$SRC/android/app/build.gradle"  "$OUT/android/app/build.gradle"
+          cp "$SRC/android/build.gradle"      "$OUT/android/build.gradle"
+          cp "$SRC/android/settings.gradle"   "$OUT/android/settings.gradle"
+          cp "$SRC/android/gradle.properties" "$OUT/android/gradle.properties"
+
+          echo "===== 组装完成，关键文件检查 ====="
+          ls -1 "$OUT/lib" "$OUT/lib/core" "$OUT/lib/pages" "$APP/kotlin/com/zhinao/alarm"
+
+      - name: 5. 拉取 Dart 依赖
+        working-directory: ${{ runner.temp }}/zhinao_build
+        run: flutter pub get
+
+      - name: 6. 编译 release APK
+        working-directory: ${{ runner.temp }}/zhinao_build
+        env:
+          # 国内网络环境下如遇 maven 拉取慢，可放开下面两行（云端一般不需要）
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g
+        run: flutter build apk --release
+
+      - name: 7. 收集产物
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp "$RUNNER_TEMP/zhinao_build/build/app/outputs/flutter-apk/app-release.apk" \
+             "$GITHUB_WORKSPACE/out/zhinao-alarm-v1.0.0.apk"
+          ls -lh "$GITHUB_WORKSPACE/out/"
+
+      - name: 8. 上传 APK（在本次运行页面底部下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhinao-alarm-apk
+          path: ${{ github.workspace }}/out/zhinao-alarm-v1.0.0.apk
+          if-no-files-found: error
