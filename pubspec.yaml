@@ -1,0 +1,25 @@
+name: zhinao_alarm
+description: "智闹 —— 日期规则 + 目标时间双条件智能闹钟（小米手机专用）"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # 本地数据库：存闹钟配置
+  sqflite: ^2.3.3
+  # 数据库文件路径
+  path: ^1.9.0
+  # 日期格式化（周一 / 9月28日 这类中文展示）
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

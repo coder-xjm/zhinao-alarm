@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Flutter 启动时使用的主题（避免白屏闪烁） -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+
+    <!-- Flutter 引擎就绪后切换到该主题 -->
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+
+    <!-- 响铃页主题：全屏、深色、无标题栏 -->
+    <style name="RingTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0A0A12</item>
+        <item name="android:colorBackground">#0A0A12</item>
+        <item name="android:statusBarColor">#0A0A12</item>
+        <item name="android:navigationBarColor">#0A0A12</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
+
+</resources>
