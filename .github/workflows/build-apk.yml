@@ -25,7 +25,7 @@ jobs:
 
       # ⚠️ 必须锁具体版本，不能用 stable。脚手架的 AGP/Kotlin/Gradle 版本必须和
       #    我们覆盖进去的 android/app/build.gradle 写法配套，锁版本才不会漂移。
-      #    Flutter 3.24.5 官方模板：Gradle 8.3 + AGP 8.1.0 + Kotlin 1.8.22 + Java 目标 1.8
+      #    工具链组合：Flutter 3.24.5 + Gradle 8.3 + AGP 8.1.0 + Kotlin 1.9.24 + Java 目标 1.8
       - name: 3. 安装 Flutter SDK（锁定 3.24.5）
         uses: subosito/flutter-action@v2
         with:
@@ -57,6 +57,9 @@ jobs:
           # 删掉脚手架里可能出现的 Kotlin DSL 脚本，避免和我们的 Groovy 脚本打架
           find "$OUT/android" -name "*.gradle.kts" -delete
 
+          # 删掉脚手架自带的测试文件（它引用了不存在的 MyApp，会污染静态检查结果）
+          rm -rf "$OUT/test"
+
           # ---- 用项目源码覆盖脚手架 ----
           cp "$SRC/pubspec.yaml"          "$OUT/pubspec.yaml"
           cp "$SRC/analysis_options.yaml" "$OUT/analysis_options.yaml"
@@ -76,25 +79,32 @@ jobs:
           cp "$SRC/android/app/build.gradle" "$OUT/android/app/build.gradle"
 
           # ---- 兼容补丁 1：编译目标对齐到模板的 Java 1.8 ----
-          # 插件模块（sqflite 等）全部按 1.8 编译，app 模块若用 17 会触发
-          # Kotlin 的 "Inconsistent JVM-target compatibility" 硬错误。
-          # 本地项目文件已修正为 1.8；这条 sed 防止旧版本文件混进来，是幂等空操作。
           sed -i \
             -e "s/JavaVersion\.VERSION_17/JavaVersion.VERSION_1_8/g" \
             -e "s/jvmTarget = \"17\"/jvmTarget = JavaVersion.VERSION_1_8/" \
             "$OUT/android/app/build.gradle"
 
-          # ---- 兼容补丁 2：withValues -> withOpacity ----
-          # 仓库里的部分源码曾用 Flutter 3.27 才有的 Color.withValues(alpha:)。
-          # 统一替换成所有版本都支持的 withOpacity()。本地代码已改成通用写法，
-          # 这一步在那种情况下是空操作；留着它是为了防止旧写法混进来。
-          find "$OUT/lib" -name "*.dart" -print0 | xargs -0 sed -i "s/\.withValues(alpha:/\.withOpacity(/g"
+          # ---- 兼容补丁 2：Kotlin 编译器升到 1.9.24 ----
+          # 脚手架默认 1.8.22，但新版插件（sqflite 等）的 Android 代码需要
+          # Kotlin 1.9 编译器，否则报 GradleCompilerRunnerWithWorkers → Compilation error。
+          # Kotlin 1.9.24 与 Gradle 8.3 / AGP 8.1.0 / JDK 17 兼容。
+          sed -i \
+            -e "s/id \"org.jetbrains.kotlin.android\" version \"[^\"]*\"/id \"org.jetbrains.kotlin.android\" version \"1.9.24\"/" \
+            "$OUT/android/settings.gradle"
+
+          # ---- 兼容补丁 3：sqflite 锁死为 2.3.3 ----
+          # pubspec 里若写 ^2.3.3，云端会解析到新版 sqflite，其 Android 代码与
+          # 锁定工具链不兼容。这里强制改成精确版本（幂等，改过就无变化）。
+          sed -i "s/sqflite: .*/sqflite: 2.3.3/" "$OUT/pubspec.yaml"
+
+          # ---- 兼容补丁 4：withValues -> withOpacity ----
+          find "$OUT/lib" -name "*.dart" -print0 | xargs -0 sed -i "s/\.withValues(alpha:/\.withOpacity(/g" || true
           echo "withValues 残留（应为 0）: $(grep -r "withValues" "$OUT/lib" | wc -l)"
 
           # ---- 自检：确认关键文件都到位、配置正确 ----
-          echo "===== 组装完成，关键文件检查 ====="
-          ls -1 "$OUT/lib" "$OUT/lib/core" "$OUT/lib/pages" "$APP/kotlin/com/zhinao/alarm"
-          echo "----- minSdk 与编译目标 -----"
+          echo "===== 组装完成，关键配置检查 ====="
+          grep -n "kotlin.android" "$OUT/android/settings.gradle"
+          grep -n "sqflite" "$OUT/pubspec.yaml"
           grep -n -E "minSdk|Compatibility|jvmTarget" "$OUT/android/app/build.gradle"
 
       - name: 5. 拉取 Dart 依赖
@@ -125,19 +135,23 @@ jobs:
 
       # 构建失败时，把报错关键行提取出来变成「注解」——
       # 注解不需要管理员权限就能远程读到，方便直接定位问题。
+      # 注意：Kotlin 编译器报错的行以 "e: " 开头（不含 error 字样），必须单独匹配。
       - name: 8. 失败时提取报错（变成注解）
         if: failure()
         run: |
           LOG="$RUNNER_TEMP/build_log.txt"
           if [ -f "$LOG" ]; then
-            echo "===== What went wrong / 报错关键行 ====="
-            grep -n -iE "error|FAILURE|Exception|What went wrong" "$LOG" | tail -30 | while IFS= read -r l; do
+            echo "===== Kotlin / Gradle 报错关键行 ====="
+            grep -nE "^e: |error:|FAILURE:|What went wrong|Compilation error|Caused by:|Execution failed for task" "$LOG" \
+              | tail -40 > "$RUNNER_TEMP/err_lines.txt"
+            cat "$RUNNER_TEMP/err_lines.txt"
+            echo "===== 日志最后 60 行 ====="
+            tail -60 "$LOG"
+            cat "$RUNNER_TEMP/err_lines.txt" | head -12 | while IFS= read -r l; do
               l="${l//$'\r'/}"
               l="${l//%/%25}"
               echo "::error::$l"
             done
-            echo "===== 日志最后 50 行 ====="
-            tail -50 "$LOG"
           else
             echo "::error::构建日志文件不存在，失败发生在更早的步骤"
           fi
