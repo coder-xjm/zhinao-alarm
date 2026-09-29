@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/alarm_store.dart';
 import 'pages/home_page.dart';
@@ -28,6 +29,20 @@ class ZhinaoApp extends StatelessWidget {
     return MaterialApp(
       title: '智闹',
       debugShowCheckedModeBanner: false,
+
+      // ---- 中文界面 ----
+      // 固定中文，让日期选择器、"确定/取消"等系统组件都显示中文
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: const [
+        Locale('zh', 'CN'),
+        Locale('en', 'US'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(

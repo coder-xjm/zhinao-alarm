@@ -17,9 +17,9 @@ Future<Alarm?> showRulePicker(BuildContext context, Alarm alarm) {
 /// ============================================================
 /// 条件一配置弹层
 ///
-/// 5 种规则互斥单选：
-///   每日 / 工作日 / 节假日 / 每隔 N 周的周几 / 每月 N 号
-/// 后两种选中后会就地展开二级参数，不需要再跳一层页面。
+/// 6 种规则互斥单选：
+///   每日 / 每隔 N 天 / 工作日 / 节假日 / 每隔 N 周的周几 / 每月 N 号
+/// 后三种选中后会就地展开二级参数，不需要再跳一层页面。
 /// ============================================================
 class _RulePickerSheet extends StatefulWidget {
   const _RulePickerSheet({required this.alarm});
@@ -33,6 +33,8 @@ class _RulePickerSheet extends StatefulWidget {
 class _RulePickerSheetState extends State<_RulePickerSheet> {
   late DateRuleType _ruleType = widget.alarm.ruleType;
   late int _weekInterval = widget.alarm.weekInterval;
+  late int _dayInterval = widget.alarm.effectiveDayInterval;
+  late DateTime _dayAnchor = widget.alarm.dayAnchorDate;
   late Set<int> _weekdays = {...widget.alarm.weekdays};
   late Set<int> _monthDays = {...widget.alarm.monthDays};
   late MonthDayFallback _fallback = widget.alarm.monthDayFallback;
@@ -65,6 +67,17 @@ class _RulePickerSheetState extends State<_RulePickerSheet> {
               child: Column(
                 children: [
                   _ruleOption(DateRuleType.daily, '每天都响', Icons.wb_sunny_outlined),
+
+                  // ---- 每隔 N 天 ----
+                  _ruleOption(
+                    DateRuleType.intervalDays,
+                    '每隔几天',
+                    Icons.timelapse_outlined,
+                    subtitle: _intervalSummary(),
+                  ),
+                  if (_ruleType == DateRuleType.intervalDays)
+                    _intervalPanel(context),
+
                   _ruleOption(DateRuleType.workday, '工作日', Icons.work_outline,
                       subtitle: '周一至周五'),
                   _ruleOption(DateRuleType.holiday, '节假日', Icons.weekend_outlined,
@@ -155,6 +168,143 @@ class _RulePickerSheetState extends State<_RulePickerSheet> {
         selected ? Icons.radio_button_checked : Icons.radio_button_off,
         size: 20,
         color: selected ? scheme.primary : scheme.outline,
+      ),
+    );
+  }
+
+  // ============================================================
+  // 二级面板 · 每隔 N 天
+  // ============================================================
+  Widget _intervalPanel(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
+    // 常用间隔，点一下就选中，省得一直按加号
+    const presets = <int>[2, 3, 4, 5, 6, 7, 10, 14, 15, 21, 30];
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ---------- 间隔天数：步进器 ----------
+          Text('间隔天数', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              IconButton(
+                onPressed: _dayInterval > 2
+                    ? () => setState(() => _dayInterval--)
+                    : null,
+                icon: const Icon(Icons.remove_circle_outline),
+                tooltip: '减少一天',
+              ),
+              Expanded(
+                child: Center(
+                  child: Text(
+                    '每隔 $_dayInterval 天',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: scheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _dayInterval < 99
+                    ? () => setState(() => _dayInterval++)
+                    : null,
+                icon: const Icon(Icons.add_circle_outline),
+                tooltip: '增加一天',
+              ),
+            ],
+          ),
+
+          // ---------- 常用间隔快捷选择 ----------
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: presets.map((n) {
+              return ChoiceChip(
+                label: Text('$n 天'),
+                selected: _dayInterval == n,
+                onSelected: (_) => setState(() => _dayInterval = n),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 18),
+
+          // ---------- 起始日期 ----------
+          Text('从哪天开始算', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 8),
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: _pickAnchorDate,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.event, size: 18, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Text(_dayAnchorText(),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      )),
+                  const Spacer(),
+                  Text('修改',
+                      style: TextStyle(color: scheme.primary, fontSize: 12)),
+                ],
+              ),
+            ),
+          ),
+
+          // ---------- 快捷：今天 / 明天 ----------
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              TextButton(
+                onPressed: () => _setAnchorTo(DateTime.now()),
+                child: const Text('今天'),
+              ),
+              TextButton(
+                onPressed: () =>
+                    _setAnchorTo(DateTime.now().add(const Duration(days: 1))),
+                child: const Text('明天'),
+              ),
+            ],
+          ),
+
+          // ---------- 人话解释，避免用户困惑"从哪天算" ----------
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline, size: 15, color: scheme.outline),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '起始日当天算第 1 次，之后每隔 $_dayInterval 天响一次。'
+                  '想每天都响请直接用上面的「每天都响」。',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+        ],
       ),
     );
   }
@@ -327,6 +477,32 @@ class _RulePickerSheetState extends State<_RulePickerSheet> {
     return _weekInterval == 1 ? '每周 $names' : '每隔 $_weekInterval 周的 $names';
   }
 
+  String _intervalSummary() => '每隔 $_dayInterval 天';
+
+  /// 起始日期的中文展示，如 "2026年9月29日 周二"
+  String _dayAnchorText() {
+    const weekdayChars = '一二三四五六日';
+    final w = weekdayChars[_dayAnchor.weekday - 1];
+    return '${_dayAnchor.year}年${_dayAnchor.month}月${_dayAnchor.day}日 周$w';
+  }
+
+  /// 把起始日设为某一天（只取年月日）
+  void _setAnchorTo(DateTime d) =>
+      setState(() => _dayAnchor = DateTime(d.year, d.month, d.day));
+
+  /// 打开系统日期选择器修改起始日
+  Future<void> _pickAnchorDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dayAnchor,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 3, 12, 31),
+      helpText: '选择起始日期',
+    );
+    if (picked != null) _setAnchorTo(picked);
+  }
+
   String _monthlySummary() {
     if (_monthDays.isEmpty) return '还没选日期';
     final sorted = _monthDays.toList()..sort();
@@ -343,6 +519,11 @@ class _RulePickerSheetState extends State<_RulePickerSheet> {
     final updated = widget.alarm.copyWith(
       ruleType: _ruleType,
       weekInterval: _weekInterval,
+      dayInterval: _dayInterval,
+      // 只有「每隔 N 天」才更新锚点，避免改别的规则时误改周差锚点
+      anchorDate: _ruleType == DateRuleType.intervalDays
+          ? _dayAnchor
+          : widget.alarm.anchorDate,
       weekdays: _weekdays.toList()..sort(),
       monthDays: _monthDays.toList()..sort(),
       monthDayFallback: _fallback,

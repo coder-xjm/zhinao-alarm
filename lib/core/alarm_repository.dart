@@ -15,7 +15,9 @@ class AlarmRepository {
   static final AlarmRepository instance = AlarmRepository._();
 
   static const _dbName = 'zhinao_alarm.db';
-  static const _dbVersion = 1;
+
+  /// v1 → v2：新增「每隔 N 天」所需的 dayInterval 列
+  static const _dbVersion = 2;
   static const _table = 'alarms';
 
   Database? _db;
@@ -36,6 +38,7 @@ class AlarmRepository {
             enabled INTEGER NOT NULL,
             ruleType TEXT NOT NULL,
             weekInterval INTEGER NOT NULL,
+            dayInterval INTEGER NOT NULL DEFAULT 2,
             weekdays TEXT NOT NULL,
             anchorDate INTEGER NOT NULL,
             monthDays TEXT NOT NULL,
@@ -46,6 +49,15 @@ class AlarmRepository {
             ringDurationSeconds INTEGER NOT NULL
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        // 老版本（v1）没有 dayInterval 列，补上。
+        // 有 DEFAULT 2，老闹钟升级后不会因为缺列而读不出数据。
+        if (oldVersion < 2) {
+          await db.execute(
+            'ALTER TABLE $_table ADD COLUMN dayInterval INTEGER NOT NULL DEFAULT 2',
+          );
+        }
       },
     );
     return _db!;

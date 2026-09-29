@@ -214,6 +214,7 @@ class RingActivity : Activity() {
     /** 规则类型转中文，用于响铃页说明 */
     private fun ruleText(ruleType: String?): String = when (ruleType) {
         "daily" -> "每日"
+        "intervalDays" -> "每隔几天"
         "workday" -> "工作日"
         "holiday" -> "节假日"
         "weeklyInterval" -> "每隔几周的周几"

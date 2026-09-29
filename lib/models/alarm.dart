@@ -1,10 +1,20 @@
 import 'dart:convert';
 
 /// ============================================================
-/// 条件一的 5 种日期规则类型
+/// 条件一的 6 种日期规则类型
+///
+/// ⚠️ 序列化用的是 .name 字符串（不是 index），所以枚举顺序可以自由调整，
+///    不会影响已存到数据库/原生侧的老数据。
 /// ============================================================
 enum DateRuleType {
+  /// 每天都响
   daily('每日'),
+
+  /// 每隔 N 天响一次（N ≥ 2），从 anchorDate 那天起算。
+  /// 「每天」本质是 N = 1 的特例，但保留成两种独立选项：
+  /// 一是老数据/老习惯不用改，二是避免用户在间隔面板里还要把 N 调到 1。
+  intervalDays('每隔几天'),
+
   workday('工作日'),
   holiday('节假日'),
   weeklyInterval('每隔几周的周几'),
@@ -50,6 +60,7 @@ class Alarm {
     this.enabled = true,
     this.ruleType = DateRuleType.workday,
     this.weekInterval = 1,
+    this.dayInterval = 2,
     List<int>? weekdays,
     DateTime? anchorDate,
     List<int>? monthDays,
@@ -82,10 +93,15 @@ class Alarm {
   /// 「每隔 N 周」的 N，取值 1~8
   int weekInterval;
 
+  /// 「每隔 N 天」的 N，取值 2~99（1 天请直接用「每天都响」）
+  int dayInterval;
+
   /// 「每隔 N 周的周几」里选中的星期，1=周一 ... 7=周日
   List<int> weekdays;
 
-  /// 周差计算锚点（以创建当周为第 1 周）
+  /// 周差 / 天差的共同锚点。
+  /// - 每隔 N 周的周几：以创建当周为第 1 周
+  /// - 每隔 N 天：从这一天开始算第 0 天（可被用户在界面上改）
   DateTime anchorDate;
 
   /// 「每月几号」里选中的日期，1~31
@@ -111,11 +127,25 @@ class Alarm {
   String get timeText =>
       '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
 
+  /// 「每隔 N 天」的 N，做了安全钳制：小于 2 当 2，大于 99 当 99。
+  /// 所有判定与展示都必须走这个 getter，避免脏数据导致除零或永不停歇的排程。
+  int get effectiveDayInterval {
+    if (dayInterval < 2) return 2;
+    if (dayInterval > 99) return 99;
+    return dayInterval;
+  }
+
+  /// 间隔规则的起始日（去掉时分秒，避免时分秒影响天数差）
+  DateTime get dayAnchorDate =>
+      DateTime(anchorDate.year, anchorDate.month, anchorDate.day);
+
   /// 条件一的中文摘要，用于列表展示
   String get ruleSummary {
     switch (ruleType) {
       case DateRuleType.daily:
         return '每日';
+      case DateRuleType.intervalDays:
+        return '每隔 $effectiveDayInterval 天';
       case DateRuleType.workday:
         return '工作日（周一至周五）';
       case DateRuleType.holiday:
@@ -146,6 +176,7 @@ class Alarm {
         'enabled': enabled ? 1 : 0,
         'ruleType': ruleType.name,
         'weekInterval': weekInterval,
+        'dayInterval': dayInterval,
         'weekdays': jsonEncode(weekdays),
         'anchorDate': anchorDate.millisecondsSinceEpoch,
         'monthDays': jsonEncode(monthDays),
@@ -165,6 +196,8 @@ class Alarm {
         enabled: (m['enabled'] as int) == 1,
         ruleType: DateRuleType.fromName(m['ruleType'] as String),
         weekInterval: m['weekInterval'] as int,
+        // 老数据库没有这一列，缺失时回落到默认值 2
+        dayInterval: (m['dayInterval'] as int?) ?? 2,
         weekdays:
             (jsonDecode(m['weekdays'] as String) as List).map((e) => e as int).toList(),
         anchorDate:
@@ -188,6 +221,7 @@ class Alarm {
         'enabled': enabled,
         'ruleType': ruleType.name,
         'weekInterval': weekInterval,
+        'dayInterval': dayInterval,
         'weekdays': weekdays,
         'anchorDateMillis': anchorDate.millisecondsSinceEpoch,
         'monthDays': monthDays,
@@ -205,6 +239,7 @@ class Alarm {
     bool? enabled,
     DateRuleType? ruleType,
     int? weekInterval,
+    int? dayInterval,
     List<int>? weekdays,
     DateTime? anchorDate,
     List<int>? monthDays,
@@ -222,6 +257,7 @@ class Alarm {
         enabled: enabled ?? this.enabled,
         ruleType: ruleType ?? this.ruleType,
         weekInterval: weekInterval ?? this.weekInterval,
+        dayInterval: dayInterval ?? this.dayInterval,
         weekdays: weekdays ?? this.weekdays,
         anchorDate: anchorDate ?? this.anchorDate,
         monthDays: monthDays ?? this.monthDays,

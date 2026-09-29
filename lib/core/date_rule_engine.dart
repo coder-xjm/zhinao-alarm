@@ -26,6 +26,19 @@ class DateRuleEngine {
       case DateRuleType.daily:
         return true;
 
+      // ---- 1.5 每隔 N 天 ----
+      // 语义：从 anchorDate 那天算作第 0 天，此后每 N 天命中一次。
+      //   diff = 目标日 - 锚点日（按"天"计，与时分秒无关）
+      //   diff < 0  → 还没到起始日，不响
+      //   diff % N == 0 → 命中
+      // 这样"每隔 3 天"是可预测、可复现的：重启手机、错过一次，
+      // 都不会让相位漂移（这点比"从上次响铃算起"可靠得多）。
+      case DateRuleType.intervalDays:
+        final n = alarm.effectiveDayInterval;
+        final diff = dayDiff(alarm.dayAnchorDate, d);
+        if (diff < 0) return false;
+        return diff % n == 0;
+
       // ---- 2. 工作日：周一~周五 ----
       case DateRuleType.workday:
         return d.weekday >= DateTime.monday && d.weekday <= DateTime.friday;
@@ -56,6 +69,19 @@ class DateRuleEngine {
         }
         return false;
     }
+  }
+
+  /// ------------------------------------------------------------
+  /// 计算两个日期相差多少天（只按年月日，忽略时分秒）
+  ///
+  /// 用 UTC 构造再求差，可以彻底避开夏令时切换导致的 ±1 天误差
+  /// （中国大陆当前无夏令时，但这样写在任何时区都成立）。
+  /// 目标早于锚点时返回负数。
+  /// ------------------------------------------------------------
+  static int dayDiff(DateTime anchor, DateTime target) {
+    final a = DateTime.utc(anchor.year, anchor.month, anchor.day);
+    final t = DateTime.utc(target.year, target.month, target.day);
+    return t.difference(a).inDays;
   }
 
   /// ------------------------------------------------------------

@@ -30,6 +30,34 @@ object RuleEngine {
         cal.set(Calendar.MILLISECOND, 0)
     }
 
+    /**
+     * 归一到「当天 12:00」。
+     *
+     * 为什么不用 00:00 去算天数差：若时区存在夏令时切换，
+     * 00:00 那天可能被前移/后移一小时，导致 (毫秒差 / 86400000) 取整后差一天。
+     * 取正午作为基准点可以完全避开这个问题（中国大陆当前无夏令时，
+     * 但这样写在任何时区都成立）。
+     */
+    private fun normalizeToNoon(cal: Calendar) {
+        cal.set(Calendar.HOUR_OF_DAY, 12)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+    }
+
+    // ============================================================
+    // 两个日期相差多少天（只按年月日，忽略时分秒）
+    // 目标早于锚点时返回负数。用 floorDiv 保证负数方向也对。
+    // ============================================================
+    private fun dayDiff(anchorMillis: Long, target: Calendar): Int {
+        val anchor = Calendar.getInstance().apply { timeInMillis = anchorMillis }
+        val targetCal = target.clone() as Calendar
+        normalizeToNoon(anchor)
+        normalizeToNoon(targetCal)
+        val diffMillis = targetCal.timeInMillis - anchor.timeInMillis
+        return Math.floorDiv(diffMillis, ONE_DAY_MILLIS).toInt()
+    }
+
     // ============================================================
     // 条件一：这一天该不该响
     // ============================================================
@@ -41,6 +69,24 @@ object RuleEngine {
         return when (alarm.ruleType) {
             // ---- 每日 ----
             "daily" -> true
+
+            // ---- 每隔 N 天 ----
+            // 从 anchorDateMillis 那天算作第 0 天，之后每 N 天命中一次。
+            // 语义与 Dart 侧 date_rule_engine.dart 的 intervalDays 分支完全一致：
+            //   diff < 0        → 还没到起始日，不响
+            //   diff % N == 0   → 命中
+            // 用固定锚点（而不是"上次响铃日"）的好处：重启手机、漏响一次，
+            // 相位都不会漂移。
+            "intervalDays" -> {
+                val raw = alarm.dayInterval
+                val n = when {
+                    raw < 2 -> 2
+                    raw > 99 -> 99
+                    else -> raw
+                }
+                val diff = dayDiff(alarm.anchorDateMillis, cal)
+                diff >= 0 && diff % n == 0
+            }
 
             // ---- 工作日：周一至周五 ----
             "workday" -> iso in 1..5

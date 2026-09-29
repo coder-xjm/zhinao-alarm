@@ -18,6 +18,8 @@ data class AlarmModel(
     val enabled: Boolean,
     val ruleType: String,
     val weekInterval: Int,
+    /** 「每隔 N 天」的 N，取值 2~99。缺失时（旧版存的数据）回落到 2。 */
+    val dayInterval: Int,
     val weekdays: List<Int>,
     val anchorDateMillis: Long,
     val monthDays: List<Int>,
@@ -38,6 +40,7 @@ data class AlarmModel(
         put("enabled", enabled)
         put("ruleType", ruleType)
         put("weekInterval", weekInterval)
+        put("dayInterval", dayInterval)
         put("weekdays", JSONArray(weekdays))
         put("anchorDateMillis", anchorDateMillis)
         put("monthDays", JSONArray(monthDays))
@@ -59,6 +62,7 @@ data class AlarmModel(
             enabled = o.optBoolean("enabled", true),
             ruleType = o.optString("ruleType", "daily"),
             weekInterval = o.optInt("weekInterval", 1),
+            dayInterval = o.optInt("dayInterval", 2),
             weekdays = o.optJSONArray("weekdays").toIntList(),
             anchorDateMillis = o.optLong("anchorDateMillis", System.currentTimeMillis()),
             monthDays = o.optJSONArray("monthDays").toIntList(),
@@ -81,6 +85,7 @@ data class AlarmModel(
             enabled = (map["enabled"] as? Boolean) ?: true,
             ruleType = (map["ruleType"] as? String) ?: "daily",
             weekInterval = (map["weekInterval"] as? Number)?.toInt() ?: 1,
+            dayInterval = (map["dayInterval"] as? Number)?.toInt() ?: 2,
             weekdays = (map["weekdays"] as? List<*>)?.mapNotNull {
                 (it as? Number)?.toInt()
             } ?: emptyList(),
