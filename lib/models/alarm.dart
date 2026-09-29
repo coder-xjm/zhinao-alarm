@@ -68,6 +68,7 @@ class Alarm {
     this.snoozeMinutes = 5,
     this.maxSnoozeTimes = 3,
     this.vibrate = true,
+    this.boostVolume = true,
     this.ringDurationSeconds = 300,
   })  : id = id ?? DateTime.now().microsecondsSinceEpoch.toString(),
         weekdays = weekdays ?? <int>[1, 2, 3, 4, 5],
@@ -119,6 +120,14 @@ class Alarm {
 
   /// 是否震动
   bool vibrate;
+
+  /// 响铃时是否把系统「闹钟音量」临时拉到最大。
+  ///
+  /// 默认 true（闹钟的意义就是必须被听见），但用户可以关掉 ——
+  /// 关掉后 App 完全不碰系统音量。
+  /// 注意：即使开着，也只在响铃期间生效，停止响铃后会把音量还原成你原来的值，
+  /// 不会永久改掉系统设置。见 RingService.boostAlarmVolume / restoreAlarmVolume。
+  bool boostVolume;
 
   /// 响铃时长（秒），到点自动停
   int ringDurationSeconds;
@@ -184,6 +193,7 @@ class Alarm {
         'snoozeMinutes': snoozeMinutes,
         'maxSnoozeTimes': maxSnoozeTimes,
         'vibrate': vibrate ? 1 : 0,
+        'boostVolume': boostVolume ? 1 : 0,
         'ringDurationSeconds': ringDurationSeconds,
       };
 
@@ -208,6 +218,8 @@ class Alarm {
         snoozeMinutes: m['snoozeMinutes'] as int,
         maxSnoozeTimes: m['maxSnoozeTimes'] as int,
         vibrate: (m['vibrate'] as int) == 1,
+        // 老数据库没有这一列，缺失时按默认值「开启」处理
+        boostVolume: ((m['boostVolume'] as int?) ?? 1) == 1,
         ringDurationSeconds: m['ringDurationSeconds'] as int,
       );
 
@@ -229,6 +241,7 @@ class Alarm {
         'snoozeMinutes': snoozeMinutes,
         'maxSnoozeTimes': maxSnoozeTimes,
         'vibrate': vibrate,
+        'boostVolume': boostVolume,
         'ringDurationSeconds': ringDurationSeconds,
       };
 
@@ -247,6 +260,7 @@ class Alarm {
     int? snoozeMinutes,
     int? maxSnoozeTimes,
     bool? vibrate,
+    bool? boostVolume,
     int? ringDurationSeconds,
   }) =>
       Alarm(
@@ -265,6 +279,7 @@ class Alarm {
         snoozeMinutes: snoozeMinutes ?? this.snoozeMinutes,
         maxSnoozeTimes: maxSnoozeTimes ?? this.maxSnoozeTimes,
         vibrate: vibrate ?? this.vibrate,
+        boostVolume: boostVolume ?? this.boostVolume,
         ringDurationSeconds: ringDurationSeconds ?? this.ringDurationSeconds,
       );
 }

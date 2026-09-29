@@ -17,7 +17,8 @@ class AlarmRepository {
   static const _dbName = 'zhinao_alarm.db';
 
   /// v1 → v2：新增「每隔 N 天」所需的 dayInterval 列
-  static const _dbVersion = 2;
+  /// v2 → v3：新增「响铃时音量拉满」开关所需的 boostVolume 列
+  static const _dbVersion = 3;
   static const _table = 'alarms';
 
   Database? _db;
@@ -46,6 +47,7 @@ class AlarmRepository {
             snoozeMinutes INTEGER NOT NULL,
             maxSnoozeTimes INTEGER NOT NULL,
             vibrate INTEGER NOT NULL,
+            boostVolume INTEGER NOT NULL DEFAULT 1,
             ringDurationSeconds INTEGER NOT NULL
           )
         ''');
@@ -56,6 +58,13 @@ class AlarmRepository {
         if (oldVersion < 2) {
           await db.execute(
             'ALTER TABLE $_table ADD COLUMN dayInterval INTEGER NOT NULL DEFAULT 2',
+          );
+        }
+        // v2 没有 boostVolume 列，补上。默认 1（开启），
+        // 与老版本「响铃自动拉满音量」的实际行为保持一致，升级后体验不变。
+        if (oldVersion < 3) {
+          await db.execute(
+            'ALTER TABLE $_table ADD COLUMN boostVolume INTEGER NOT NULL DEFAULT 1',
           );
         }
       },

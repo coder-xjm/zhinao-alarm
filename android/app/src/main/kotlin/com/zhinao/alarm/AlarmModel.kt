@@ -27,6 +27,8 @@ data class AlarmModel(
     val snoozeMinutes: Int,
     val maxSnoozeTimes: Int,
     val vibrate: Boolean,
+    /** 响铃时是否把系统闹钟音量临时拉到最大。关掉则完全不碰系统音量。 */
+    val boostVolume: Boolean,
     val ringDurationSeconds: Int
 ) {
     /** PendingIntent 的 requestCode，保证每个闹钟互相独立 */
@@ -48,6 +50,7 @@ data class AlarmModel(
         put("snoozeMinutes", snoozeMinutes)
         put("maxSnoozeTimes", maxSnoozeTimes)
         put("vibrate", vibrate)
+        put("boostVolume", boostVolume)
         put("ringDurationSeconds", ringDurationSeconds)
     }
 
@@ -70,6 +73,7 @@ data class AlarmModel(
             snoozeMinutes = o.optInt("snoozeMinutes", 5),
             maxSnoozeTimes = o.optInt("maxSnoozeTimes", 3),
             vibrate = o.optBoolean("vibrate", true),
+            boostVolume = o.optBoolean("boostVolume", true),
             ringDurationSeconds = o.optInt("ringDurationSeconds", 300)
         )
 
@@ -98,6 +102,7 @@ data class AlarmModel(
             snoozeMinutes = (map["snoozeMinutes"] as? Number)?.toInt() ?: 5,
             maxSnoozeTimes = (map["maxSnoozeTimes"] as? Number)?.toInt() ?: 3,
             vibrate = (map["vibrate"] as? Boolean) ?: true,
+            boostVolume = (map["boostVolume"] as? Boolean) ?: true,
             ringDurationSeconds = (map["ringDurationSeconds"] as? Number)?.toInt() ?: 300
         )
     }

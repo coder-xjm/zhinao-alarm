@@ -245,12 +245,12 @@ jobs:
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/out"
           cp "$RUNNER_TEMP/zhinao_build/build/app/outputs/flutter-apk/app-release.apk" \
-             "$GITHUB_WORKSPACE/out/zhinao-alarm-v1.1.0.apk"
+             "$GITHUB_WORKSPACE/out/zhinao-alarm-v1.1.1.apk"
           ls -lh "$GITHUB_WORKSPACE/out/"
 
       - name: 10. 上传 APK（在本次运行页面底部下载）
         uses: actions/upload-artifact@v4
         with:
           name: zhinao-alarm-apk
-          path: ${{ github.workspace }}/out/zhinao-alarm-v1.1.0.apk
+          path: ${{ github.workspace }}/out/zhinao-alarm-v1.1.1.apk
           if-no-files-found: error

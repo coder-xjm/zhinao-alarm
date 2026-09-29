@@ -90,6 +90,15 @@ class RingService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var alarmId: String? = null
 
+    /**
+     * 响铃前被我们改掉的原始闹钟音量。
+     *
+     * null 表示「没有改动过系统音量」，无需还原。
+     * 这样设计的好处：用户关掉开关、或音量本来就是最大时，
+     * 我们完全不写系统设置，也不会做多余的还原动作。
+     */
+    private var savedAlarmVolume: Int? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -144,7 +153,7 @@ class RingService : Service() {
         alarmId = alarm.id
 
         showForegroundNotification(alarm)
-        startSound()
+        startSound(alarm)
         startVibration(alarm)
         launchRingActivity(alarm)
         scheduleAutoStop(alarm)
@@ -242,18 +251,19 @@ class RingService : Service() {
     // 声音 / 震动
     // ============================================================
 
-    private fun startSound() {
+    private fun startSound(alarm: AlarmModel) {
         val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
             ?: return
 
-        try {
-            // 把闹钟音量拉到最大：闹钟的意义就是必须被听见
-            (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.let { am ->
-                val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-                am.setStreamVolume(AudioManager.STREAM_ALARM, max, 0)
-            }
+        // 是否拉满音量由用户决定（闹钟的「响铃时音量拉到最大」开关）。
+        // 注意：这里只是「临时」拉满，响铃结束后 stopRinging() 会还原，
+        // 不会永久改掉用户的系统闹钟音量。
+        if (alarm.boostVolume) {
+            boostAlarmVolume()
+        }
 
+        try {
             player = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -268,6 +278,50 @@ class RingService : Service() {
             }
         } catch (e: Exception) {
             // 铃声播放失败不影响震动和界面，不中断响铃流程
+        }
+    }
+
+    /**
+     * 把系统闹钟音量临时拉到最大，并记下原值以便还原。
+     *
+     * 三种情况下什么都不做：
+     *   1. 用户把开关关了（调用方已判断，不会走到这里）
+     *   2. 音量本来就是最大 —— 没什么可改，也就无需还原
+     *   3. 已经有一次未还原的改动（savedAlarmVolume != null）—— 保证只记一次原值
+     */
+    private fun boostAlarmVolume() {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+
+        runCatching {
+            val current = am.getStreamVolume(AudioManager.STREAM_ALARM)
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+
+            if (current >= max) return@runCatching
+            if (savedAlarmVolume != null) return@runCatching
+
+            savedAlarmVolume = current
+            am.setStreamVolume(AudioManager.STREAM_ALARM, max, 0)
+        }
+    }
+
+    /**
+     * 还原响铃前记录的音量。
+     *
+     * 只有「当前音量仍是我们拉到的那档」才还原 ——
+     * 也就是说，如果用户在响铃期间自己动过音量条，我们尊重用户的操作，不覆盖。
+     */
+    private fun restoreAlarmVolume() {
+        val saved = savedAlarmVolume ?: return
+        savedAlarmVolume = null
+
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+
+        runCatching {
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            val current = am.getStreamVolume(AudioManager.STREAM_ALARM)
+            if (current == max) {
+                am.setStreamVolume(AudioManager.STREAM_ALARM, saved, 0)
+            }
         }
     }
 
@@ -305,6 +359,10 @@ class RingService : Service() {
 
         runCatching { vibrator?.cancel() }
         vibrator = null
+
+        // 还原被拉满的闹钟音量。stopRinging 是所有停止路径的必经之处
+        //（用户点关闭 / 点贪睡 / 到时自动停 / 服务被销毁），所以放在这里最稳妥。
+        restoreAlarmVolume()
     }
 
     // ============================================================

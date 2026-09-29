@@ -269,6 +269,22 @@ class _EditAlarmPageState extends State<EditAlarmPage> {
           value: _alarm.vibrate,
           onChanged: (v) => setState(() => _alarm = _alarm.copyWith(vibrate: v)),
         ),
+        const Divider(height: 1, indent: 16, endIndent: 16),
+
+        // ---- 响铃时音量拉满 ----
+        SwitchListTile(
+          secondary: const Icon(Icons.volume_up_outlined),
+          title: const Text('响铃时音量拉到最大'),
+          subtitle: Text(
+            _alarm.boostVolume
+                ? '响铃期间把闹钟音量调到最大，停止后自动还原'
+                : '不改动系统音量，按你当前的闹钟音量响铃',
+            style: const TextStyle(fontSize: 12),
+          ),
+          value: _alarm.boostVolume,
+          onChanged: (v) =>
+              setState(() => _alarm = _alarm.copyWith(boostVolume: v)),
+        ),
       ],
     );
   }
