@@ -34,8 +34,12 @@
 ```
 
 > ⚠️ 流水线里 Flutter 版本**锁定在 3.24.5**，不要改成 `stable`。
-> 本目录下的 `android/*.gradle` 是按 Flutter 3.24 的工程模板写的，
-> 换成最新版会因 AGP / Kotlin / Gradle 版本和 DSL 语法变更而构建失败。
+> 设计上有两条保险：
+> 1. 脚手架自带、且与 Flutter 版本自洽的 `android/settings.gradle` / `build.gradle` / `gradle.properties` **不做覆盖**，
+>    只覆盖 `android/app/build.gradle`（为了 `minSdk = 24` 和 `androidx.core` 依赖）——
+>    避免手写脚本里的 AGP/Kotlin 版本号和云端 Gradle 包装器对不上。
+> 2. 复制 `lib/` 后会自动把 `withValues(alpha:` 替换为 `withOpacity(`，
+>    兼容仓库里旧写法的代码；本地代码已改为通用写法，该替换是空操作。
 
 ---
 
@@ -115,8 +119,9 @@ zhinao_alarm/
 flutter --version
 ```
 
-> 本项目要求 **Flutter 3.27 或更高版本**（用到了 `Color.withValues()` 等新 API）。
-> 版本过低会在编译时报 `The method 'withValues' isn't defined`。
+> 本项目要求 **Flutter 3.24 或更高版本**（`surfaceContainerHighest` 等 Material 3 色彩角色需要 3.22+，
+> 配套的 `flutter_lints 4.x` / `intl 0.19.x` 与 3.24 ~ 3.27 一带对齐）。
+> 云端流水线锁定 **3.24.5**；本地开发建议 3.24.x ~ 3.27.x。
 
 ### 2. 安装 Android 开发环境
 
@@ -343,7 +348,7 @@ flutter build apk --split-per-abi
 | `cmdline-tools component is missing` | 没装 Android SDK 命令行工具 | Android Studio → SDK Manager → SDK Tools → 勾选 **Android SDK Command-line Tools** |
 | `CocoaPods not installed` | 只影响 iOS，本项目不做 iOS | 忽略即可 |
 | `Gradle build failed to produce an .apk file` | 构建缓存脏了 | `flutter clean` 后重新 `flutter pub get` → `flutter build apk` |
-| `The method 'withValues' isn't defined` | Flutter 版本低于 3.27 | `flutter upgrade` 升级 Flutter |
+| `AAPT: error: resource android:attr/... not found` | Flutter / AGP 版本过低 | 升级到 Flutter 3.24+，与 `android/settings.gradle` 里的 AGP 版本配套 |
 | `Unsupported class file major version` | JDK 版本不对 | 装 JDK 17，并在 Android Studio 里把 Gradle JDK 设为 17 |
 | `Could not find method compileSdkVersion()` | AGP 与 Gradle 版本不匹配 | 直接用 `flutter create` 生成的 `build.gradle`，只改 `minSdk` 和 `dependencies` |
 | `Execution failed for task ':app:processReleaseManifest'` | Manifest 里的属性不被当前 SDK 识别 | 确认 `compileSdk` ≥ 34，且已覆盖本项目的 `AndroidManifest.xml` |

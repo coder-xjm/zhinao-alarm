@@ -121,7 +121,7 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.5),
+                color: theme.colorScheme.tertiaryContainer.withOpacity( 0.5),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
@@ -181,7 +181,7 @@ class _SettingsPageState extends State<SettingsPage> {
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withOpacity( 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(

@@ -150,7 +150,7 @@ class RingActivity : Activity() {
             root.addView(
                 roundedButton(
                     text = "贪睡 $snoozeMinutes 分钟",
-                    background = Color.parseColor("#23233A"),
+                    bgColor = Color.parseColor("#23233A"),
                     textColor = Color.parseColor("#E4E4F0")
                 ) {
                     RingService.snooze(this)
@@ -163,7 +163,7 @@ class RingActivity : Activity() {
         root.addView(
             roundedButton(
                 text = "关闭",
-                background = Color.parseColor("#6C7BF5"),
+                bgColor = Color.parseColor("#6C7BF5"),
                 textColor = Color.WHITE
             ) {
                 RingService.stop(this)
@@ -175,10 +175,17 @@ class RingActivity : Activity() {
         return root
     }
 
-    /** 造一个圆角按钮 */
+    /**
+     * 造一个圆角按钮
+     *
+     * 注意：参数不能命名为 background。TextView 上有个同名属性，函数参数会
+     * 把它遮蔽掉，于是 `background = ...` 会被编译器当成给 Int 参数赋值，
+     * 报 "Val cannot be reassigned" + "Type mismatch"。
+     * 这里统一改用 bgColor，并用 setBackground() 显式调用。
+     */
     private fun roundedButton(
         text: String,
-        background: Int,
+        bgColor: Int,
         textColor: Int,
         onClick: () -> Unit
     ): TextView {
@@ -192,10 +199,13 @@ class RingActivity : Activity() {
             gravity = Gravity.CENTER
             isClickable = true
             isFocusable = true
-            background = GradientDrawable().apply {
+            // 圆角背景：用 setBackground 显式设置，避免与同名字段混淆
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
                 cornerRadius = dp(29).toFloat()
-                setColor(background)
+                setColor(bgColor)
             }
+            setBackground(bg)
             layoutParams = LinearLayout.LayoutParams(dp(240), dp(58))
             setOnClickListener { onClick() }
         }

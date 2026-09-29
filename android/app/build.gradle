@@ -20,13 +20,15 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    // ⚠️ 编译目标必须是 1.8，与官方模板和插件模块（sqflite 等）保持一致。
+    //    写成 17 会触发 Kotlin 的 "Inconsistent JVM-target compatibility" 硬错误。
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
 
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = JavaVersion.VERSION_1_8
     }
 
     defaultConfig {

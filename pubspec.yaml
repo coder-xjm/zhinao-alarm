@@ -10,7 +10,9 @@ dependencies:
   flutter:
     sdk: flutter
   # 本地数据库：存闹钟配置
-  sqflite: ^2.3.3
+  # ⚠️ 必须锁死精确版本。^2.3.3 会让云端解析到新版 sqflite，
+  #    新版 Android 代码要求 Kotlin 1.9+，与锁定的工具链不兼容（Kotlin 编译错误）。
+  sqflite: 2.3.3
   # 数据库文件路径
   path: ^1.9.0
   # 日期格式化（周一 / 9月28日 这类中文展示）

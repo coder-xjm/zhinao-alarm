@@ -99,7 +99,7 @@ class _EditAlarmPageState extends State<EditAlarmPage> {
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity( 0.5),
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
@@ -182,7 +182,7 @@ class _EditAlarmPageState extends State<EditAlarmPage> {
                   fontWeight: selected ? FontWeight.w400 : FontWeight.w300,
                   color: selected
                       ? theme.colorScheme.onSurface
-                      : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.35),
+                      : theme.colorScheme.onSurfaceVariant.withOpacity( 0.35),
                 ),
               ),
             );
@@ -311,7 +311,7 @@ class _EditAlarmPageState extends State<EditAlarmPage> {
               leading: CircleAvatar(
                 radius: 12,
                 backgroundColor:
-                    theme.colorScheme.primary.withValues(alpha: index == 0 ? 1 : 0.18),
+                    theme.colorScheme.primary.withOpacity( index == 0 ? 1 : 0.18),
                 child: Text(
                   '${index + 1}',
                   style: TextStyle(
@@ -358,7 +358,7 @@ class _EditAlarmPageState extends State<EditAlarmPage> {
         color: Theme.of(context)
             .colorScheme
             .surfaceContainerHighest
-            .withValues(alpha: 0.5),
+            .withOpacity( 0.5),
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(children: children),

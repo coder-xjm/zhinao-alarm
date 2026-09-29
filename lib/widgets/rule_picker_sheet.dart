@@ -169,7 +169,7 @@ class _RulePickerSheetState extends State<_RulePickerSheet> {
       margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+        color: scheme.surfaceContainerHighest.withOpacity( 0.6),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -250,7 +250,7 @@ class _RulePickerSheetState extends State<_RulePickerSheet> {
       margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+        color: scheme.surfaceContainerHighest.withOpacity( 0.6),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(

@@ -18,7 +18,10 @@ pluginManagement {
 
 plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-    id "com.android.application" version "8.3.0" apply false
+    // ⚠️ 这两个版本号必须与云端锁定工具链配套：Gradle 8.3 + AGP 8.1.0 + Kotlin 1.9.24。
+    //    AGP 8.3.0 需要 Gradle ≥ 8.4，而模板自带的是 Gradle 8.3，会直接报错。
+    //    Kotlin 用 1.9.24：新版插件（sqflite 等）的 Android 代码需要 Kotlin 1.9 编译器。
+    id "com.android.application" version "8.1.0" apply false
     id "org.jetbrains.kotlin.android" version "1.9.24" apply false
 }
 

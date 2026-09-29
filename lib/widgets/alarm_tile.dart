@@ -50,7 +50,7 @@ class AlarmTile extends StatelessWidget {
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         elevation: 0,
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        color: scheme.surfaceContainerHighest.withOpacity( 0.55),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),

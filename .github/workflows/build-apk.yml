@@ -103,9 +103,81 @@ jobs:
 
           # ---- 自检：确认关键文件都到位、配置正确 ----
           echo "===== 组装完成，关键配置检查 ====="
+          echo "--- Kotlin 源文件 ---"
+          ls -1 "$APP/kotlin/com/zhinao/alarm/"
           grep -n "kotlin.android" "$OUT/android/settings.gradle"
           grep -n "sqflite" "$OUT/pubspec.yaml"
-          grep -n -E "minSdk|Compatibility|jvmTarget" "$OUT/android/app/build.gradle"
+          grep -n -E "minSdk|Compatibility|jvmTarget|androidx.core" "$OUT/android/app/build.gradle"
+
+      # 现场修一个已知的 Kotlin 编译错误（幂等，已修过则无变化）：
+      #
+      # RingActivity.roundedButton 的参数名叫 background，而 TextView 上有个同名
+      # 属性 background。Kotlin 里函数参数会遮蔽成员属性，于是
+      #     background = GradientDrawable().apply { ... }
+      # 被编译器理解成「给 Int 类型参数赋值」，报三条错：
+      #     Val cannot be reassigned
+      #     Type mismatch: inferred type is GradientDrawable but Int was expected  (×2)
+      #
+      # 这里把参数改名为 bgColor，并改成显式调用 setBackground(...)。
+      # 这样即使仓库里的 Kotlin 源码是旧的，也能编过。
+      - name: 4.1 修复 RingActivity 变量遮蔽 bug（幂等）
+        run: |
+          set -euo pipefail
+          KT="$RUNNER_TEMP/zhinao_build/android/app/src/main/kotlin/com/zhinao/alarm/RingActivity.kt"
+          python3 - "$KT" <<'PY'
+          import pathlib
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          src = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+          bad = [
+              "background: Int,",
+              "background = GradientDrawable",
+              "setColor(background)",
+              "background = Color.parseColor",
+          ]
+
+          # 幂等：源码里已经没有这个 bug 的任何痕迹，就直接跳过
+          if not any(b in src for b in bad):
+              print("源码不含该 bug，跳过补丁")
+              sys.exit(0)
+
+          reps = [
+              ("background: Int,", "bgColor: Int,"),
+              ("background = GradientDrawable().apply {",
+               "setBackground(GradientDrawable().apply {"),
+              ("setColor(background)", "setColor(bgColor)"),
+              ("background = Color.parseColor", "bgColor = Color.parseColor"),
+              ("}\n            layoutParams = LinearLayout.LayoutParams(dp(240), dp(58))",
+               "})\n            layoutParams = LinearLayout.LayoutParams(dp(240), dp(58))"),
+          ]
+          for old, new in reps:
+              src = src.replace(old, new)
+
+          problems = []
+          for b in bad:
+              if b in src:
+                  problems.append("仍残留 " + b)
+          if "bgColor: Int," not in src:
+              problems.append("参数名未改成 bgColor")
+          if "setColor(bgColor)" not in src:
+              problems.append("setColor 未指向 bgColor")
+          if "setBackground(GradientDrawable().apply {" not in src:
+              problems.append("setBackground 未生效")
+          if "\n            })" not in src:
+              problems.append("右括号未补上")
+
+          if problems:
+              print("::error::RingActivity 自动修复失败：" + "；".join(problems))
+              sys.exit(1)
+
+          path.write_text(src, encoding="utf-8")
+          print("RingActivity.kt 变量遮蔽 bug 修复完成")
+          PY
+
+          echo "===== 补丁后相关行 ====="
+          grep -n -E "bgColor|setBackground|setColor" "$KT" || true
 
       - name: 5. 拉取 Dart 依赖
         working-directory: ${{ runner.temp }}/zhinao_build
@@ -134,27 +206,39 @@ jobs:
           flutter build apk --release 2>&1 | tee "$RUNNER_TEMP/build_log.txt"
 
       # 构建失败时，把报错关键行提取出来变成「注解」——
-      # 注解不需要管理员权限就能远程读到，方便直接定位问题。
+      # 注解不需要仓库管理员权限就能远程读到，方便直接定位问题。
       # 注意：Kotlin 编译器报错的行以 "e: " 开头（不含 error 字样），必须单独匹配。
       - name: 8. 失败时提取报错（变成注解）
         if: failure()
         run: |
           LOG="$RUNNER_TEMP/build_log.txt"
-          if [ -f "$LOG" ]; then
-            echo "===== Kotlin / Gradle 报错关键行 ====="
-            grep -nE "^e: |error:|FAILURE:|What went wrong|Compilation error|Caused by:|Execution failed for task" "$LOG" \
-              | tail -40 > "$RUNNER_TEMP/err_lines.txt"
-            cat "$RUNNER_TEMP/err_lines.txt"
-            echo "===== 日志最后 60 行 ====="
-            tail -60 "$LOG"
-            cat "$RUNNER_TEMP/err_lines.txt" | head -12 | while IFS= read -r l; do
-              l="${l//$'\r'/}"
-              l="${l//%/%25}"
-              echo "::error::$l"
-            done
-          else
+          if [ ! -f "$LOG" ]; then
             echo "::error::构建日志文件不存在，失败发生在更早的步骤"
+            exit 0
           fi
+
+          echo "===== 关键报错行 ====="
+          grep -nE "^e: |error:|FAILURE:|What went wrong|Compilation error|Caused by:|Execution failed for task|> Task .* FAILED" "$LOG" \
+            | tail -40 > "$RUNNER_TEMP/err_lines.txt" || true
+          cat "$RUNNER_TEMP/err_lines.txt"
+
+          echo "===== 日志最后 60 行 ====="
+          tail -60 "$LOG"
+
+          head -20 "$RUNNER_TEMP/err_lines.txt" | while IFS= read -r l; do
+            l="${l//$'\r'/}"
+            l="${l//%/%25}"
+            echo "::error::$l"
+          done
+
+      # 保险：把完整构建日志也传上来。注解被截断时，可以下载这个文件。
+      - name: 8.1 失败时上传完整构建日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-失败日志
+          path: ${{ runner.temp }}/build_log.txt
+          if-no-files-found: warn
 
       - name: 9. 收集产物
         run: |
