@@ -20,6 +20,8 @@
     <!-- 前台服务：响铃时保活，Android 14+ 需声明具体类型 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- v1.2.0 后台守护服务（常驻通知，防止被小米清理掉闹钟排程） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!-- 锁屏直接弹出响铃页 -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
@@ -66,14 +68,35 @@
             android:theme="@style/RingTheme" />
 
         <!-- ==================== 响铃前台服务 ==================== -->
+        <!-- stopWithTask="false"：用户划掉最近任务时不要顺手把正在响的闹钟也停掉 -->
         <service
             android:name=".RingService"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <!-- ==================== 后台守护前台服务（v1.2.0 新增） ====================
+             常驻通知栏显示「下次响铃」，并在用户划掉任务（onTaskRemoved）时立刻重排闹钟。
+             stopWithTask="false" 是关键：没有它，划掉任务就等于把这份保险一起划掉了。 -->
+        <service
+            android:name=".KeepAliveService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="alarm_guard: 保持闹钟排程有效并在通知栏显示下一次响铃时间" />
+        </service>
 
         <!-- ==================== 闹钟到点广播 ==================== -->
         <receiver
             android:name=".AlarmReceiver"
+            android:exported="false" />
+
+        <!-- ==================== 定时自检看门狗（v1.2.0 新增） ====================
+             每 15 分钟检查一次闹钟排程是否还在，丢了的自动补排。 -->
+        <receiver
+            android:name=".WatchdogReceiver"
             android:exported="false" />
 
         <!-- ==================== 系统事件广播（开机等） ==================== -->

@@ -29,6 +29,9 @@ class _HomePageState extends State<HomePage> {
   /// 是否缺少关键权限（精确闹钟 / 电池优化豁免）
   bool _hasPermissionIssue = false;
 
+  /// 后台守护是否被关掉了（关掉后小米清理后台容易丢闹钟）
+  bool _keepAliveOff = false;
+
   @override
   void initState() {
     super.initState();
@@ -39,9 +42,16 @@ class _HomePageState extends State<HomePage> {
   Future<void> _checkPermissions() async {
     final exact = await AlarmPlatform.canScheduleExact();
     final battery = await AlarmPlatform.isBatteryOptimizationIgnored();
+    final keepAlive = await AlarmPlatform.isKeepAliveEnabled();
     if (!mounted) return;
-    setState(() => _hasPermissionIssue = !exact || !battery);
+    setState(() {
+      _hasPermissionIssue = !exact || !battery;
+      _keepAliveOff = !keepAlive;
+    });
   }
+
+  /// 是否有任何需要提醒用户的可靠性问题
+  bool get _hasWarning => _hasPermissionIssue || _keepAliveOff;
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +82,7 @@ class _HomePageState extends State<HomePage> {
 
           return Column(
             children: [
-              if (_hasPermissionIssue) _permissionBanner(context),
+              if (_hasWarning) _permissionBanner(context),
               Expanded(
                 child: store.alarms.isEmpty
                     ? _emptyState(context)
@@ -112,11 +122,16 @@ class _HomePageState extends State<HomePage> {
   /// 权限告警条：小米手机上这是闹钟能不能响的分水岭
   Widget _permissionBanner(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // 权限缺失是"可能不响"，后台守护关掉是"更容易丢"，两种文案分开说
+    final text = _hasPermissionIssue
+        ? '可靠性检查未通过，闹钟可能不响。请完成设置。'
+        : '后台守护已关闭，从最近任务划掉智闹可能丢闹钟。';
+
     return MaterialBanner(
       backgroundColor: scheme.errorContainer,
       leading: Icon(Icons.warning_amber_rounded, color: scheme.onErrorContainer),
       content: Text(
-        '可靠性检查未通过，闹钟可能不响。请完成设置。',
+        text,
         style: TextStyle(color: scheme.onErrorContainer),
       ),
       actions: [

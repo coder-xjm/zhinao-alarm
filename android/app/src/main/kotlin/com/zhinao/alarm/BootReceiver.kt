@@ -27,6 +27,9 @@ class BootReceiver : BroadcastReceiver() {
             Intent.ACTION_TIMEZONE_CHANGED,
             // 用户改了日期
             Intent.ACTION_DATE_CHANGED -> {
+                // 先把后台守护服务拉起来（开机广播属于前台服务的允许启动场景），
+                // 再全量重排 —— scheduleAll 内部还会挂上自检看门狗、刷新常驻通知。
+                KeepAliveService.start(context)
                 AlarmScheduler.scheduleAll(context)
             }
         }

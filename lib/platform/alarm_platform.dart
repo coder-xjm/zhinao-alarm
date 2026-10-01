@@ -62,6 +62,40 @@ class AlarmPlatform {
   /// 可靠性检查：下面几项任何一项不满足，闹钟都可能不响
   /// ------------------------------------------------------------
 
+  /// 原生算出的「下次响铃」文案，如「明天 07:30」；没有启用的闹钟时返回「暂无启用的闹钟」。
+  static Future<String> nextTriggerText() async {
+    try {
+      final r = await _channel.invokeMethod<String>('nextTriggerText');
+      return r ?? '暂无启用的闹钟';
+    } on PlatformException {
+      return '暂无启用的闹钟';
+    }
+  }
+
+  /// 立即全量重排一次闹钟（设置页的「立即修复」按钮）
+  static Future<void> rescheduleAll() async {
+    try {
+      await _channel.invokeMethod('rescheduleAll');
+    } on PlatformException catch (e) {
+      // ignore: avoid_print
+      print('[智闹] rescheduleAll 失败: ${e.message}');
+    }
+  }
+
+  /// 是否开启了「后台守护」（常驻通知，防止被小米清理掉闹钟排程）。默认开启。
+  static Future<bool> isKeepAliveEnabled() async {
+    try {
+      final r = await _channel.invokeMethod<bool>('isKeepAliveEnabled');
+      return r ?? true;
+    } on PlatformException {
+      return true;
+    }
+  }
+
+  /// 开启 / 关闭「后台守护」
+  static Future<void> setKeepAlive(bool enabled) =>
+      _channel.invokeMethod('setKeepAlive', {'enabled': enabled});
+
   /// 是否已获得「精确闹钟」权限（Android 12+ 需手动授予）
   static Future<bool> canScheduleExact() async {
     try {

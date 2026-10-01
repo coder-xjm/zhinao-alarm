@@ -1,5 +1,6 @@
 package com.zhinao.alarm
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.content.ComponentName
@@ -29,6 +30,9 @@ class MainActivity : FlutterActivity() {
 
     private var eventSink: EventChannel.EventSink? = null
 
+    /** 本次进程是否已经弹过通知权限申请（避免反复打扰） */
+    private var notificationPermissionAsked = false
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -51,6 +55,25 @@ class MainActivity : FlutterActivity() {
                         "cancelAll" -> {
                             AlarmScheduler.cancelAll(this)
                             result.success(null)
+                        }
+
+                        // 立刻全量重排一次（用户在设置页点「立即修复」时用）
+                        "rescheduleAll" -> {
+                            AlarmScheduler.scheduleAll(this)
+                            result.success(true)
+                        }
+
+                        // 原生算出的「下次响铃」文案，如「明天 07:30」
+                        "nextTriggerText" ->
+                            result.success(AlarmScheduler.nextTriggerText(this))
+
+                        // ---- 后台守护（常驻通知保活）----
+                        "isKeepAliveEnabled" ->
+                            result.success(KeepAliveService.isEnabled(this))
+                        "setKeepAlive" -> {
+                            val enabled = call.argument<Boolean>("enabled") ?: true
+                            KeepAliveService.setEnabled(this, enabled)
+                            result.success(enabled)
                         }
 
                         // ---- 权限与系统设置 ----
@@ -99,12 +122,45 @@ class MainActivity : FlutterActivity() {
 
         // 兜底：每次进入 App 重排一次，防止排程意外丢失
         AlarmScheduler.scheduleAll(this)
+        // 打开 App 时顺手把后台守护服务拉起来（此时 Activity 在前台，允许启动前台服务）
+        KeepAliveService.start(this)
     }
 
     override fun onResume() {
         super.onResume()
         // 从系统设置页返回后，让界面刷新权限状态
         eventSink?.success(mapOf("event" to "resumed"))
+
+        // 每次回到前台都补一遍保险：重排 + 把守护服务叫起来。
+        // 用户如果之前用小米的「一键清理」把 App 停掉了，这一下就能完全恢复。
+        AlarmScheduler.repairIfNeeded(this)
+        KeepAliveService.start(this)
+
+        // Android 13+ 通知权限：没有它，响铃通知和常驻守护通知都不会显示
+        ensureNotificationPermission()
+    }
+
+    /**
+     * 申请通知权限（Android 13+ 才需要）。
+     *
+     * 这一步很关键：没有通知权限，
+     *   · 响铃时的全屏通知弹不出来；
+     *   · 后台守护的常驻通知也看不见（前台服务仍在跑，但用户无从确认）。
+     */
+    private fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33) return
+        if (notificationPermissionAsked) return
+
+        val granted = runCatching {
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                    PackageManager.PERMISSION_GRANTED
+        }.getOrDefault(true)
+        if (granted) return
+
+        notificationPermissionAsked = true
+        runCatching {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+        }
     }
 
     // ============================================================
